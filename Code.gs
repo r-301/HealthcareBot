@@ -65,7 +65,7 @@ function doPost(e) {
 
 
 // ── doGet (ヘルスチェック用) ───────────────────────────────────────────────
-function doGet(e) {
+function doPost(e) {
   return buildResponse(200, { status: "ok", message: "LINE Health Manager GAS is running." });
 }
 
