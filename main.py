@@ -108,29 +108,15 @@ async def reply_to_line(reply_token: str, messages: list[dict]) -> None:
 
 async def post_to_gas(data: dict) -> bool:
     """GAS WebアプリへJSONをPOSTする。
-    GASは302リダイレクトを返すことがあり、httpxはその際にPOST→GETに変換してしまう。
-    そのためリダイレクトを手動で処理し、POSTメソッドを維持する。
+    GASは doPost の結果を 302 → echo エンドポイント(GET) 経由で返す。
+    httpx が 302 後に POST→GET へ変換するのはこの仕様に合った正しい挙動。
     """
-    headers = {"Content-Type": "application/json"}
-    async with httpx.AsyncClient(follow_redirects=False) as client:
+    async with httpx.AsyncClient(follow_redirects=True) as client:
         resp = await client.post(
             GAS_ENDPOINT_URL,
             json=data,
-            headers=headers,
             timeout=15.0,
         )
-        # 302/307 リダイレクトの場合、POSTのまま Location へ再リクエスト
-        if resp.status_code in (301, 302, 303, 307, 308):
-            location = resp.headers.get("location")
-            logger.info("GAS redirected to: %s", location)
-            if location:
-                resp = await client.post(
-                    location,
-                    json=data,
-                    headers=headers,
-                    timeout=15.0,
-                )
-
     if resp.status_code != 200:
         logger.error("GAS post failed: %s %s", resp.status_code, resp.text)
         return False
@@ -225,6 +211,7 @@ def build_confirmed_message(data: dict) -> list[dict]:
 
 
 # ─── Routes ────────────────────────────────────────────────────────────────
+@app.get("/")
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
