@@ -107,14 +107,30 @@ async def reply_to_line(reply_token: str, messages: list[dict]) -> None:
 
 
 async def post_to_gas(data: dict) -> bool:
-    """GAS WebアプリへJSONをPOSTする"""
-    async with httpx.AsyncClient() as client:
+    """GAS WebアプリへJSONをPOSTする。
+    GASは302リダイレクトを返すことがあり、httpxはその際にPOST→GETに変換してしまう。
+    そのためリダイレクトを手動で処理し、POSTメソッドを維持する。
+    """
+    headers = {"Content-Type": "application/json"}
+    async with httpx.AsyncClient(follow_redirects=False) as client:
         resp = await client.post(
             GAS_ENDPOINT_URL,
             json=data,
+            headers=headers,
             timeout=15.0,
-            follow_redirects=True,
         )
+        # 302/307 リダイレクトの場合、POSTのまま Location へ再リクエスト
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("location")
+            logger.info("GAS redirected to: %s", location)
+            if location:
+                resp = await client.post(
+                    location,
+                    json=data,
+                    headers=headers,
+                    timeout=15.0,
+                )
+
     if resp.status_code != 200:
         logger.error("GAS post failed: %s %s", resp.status_code, resp.text)
         return False
